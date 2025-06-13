@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -lt 1 ]; then
+  echo "Usage: $0 <remote-url> [<remote-url> …]"
+  exit 1
+fi
+
+# 1) Init & bootstrap
+if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+  echo "🚀 Initializing empty Git repository"
+  git init
+fi
+if ! git rev-parse --verify HEAD &>/dev/null; then
+  echo "📝 Creating initial empty commit"
+  git commit --allow-empty -m "chore: initial commit"
+fi
+
+# 2) Add named remotes
+for url in "$@"; do
+  if [[ "$url" =~ github\.com ]]; then
+    name=github
+  elif [[ "$url" =~ ([Gg]itlab) ]]; then
+    name=gitlab
+  else
+    name=remote$(echo -n "$url" | cksum | cut -f1 -d' ')
+  fi
+
+  if git remote get-url "$name" &>/dev/null; then
+    echo "🔗 Remote '$name' exists, skipping"
+  else
+    echo "🔗 Adding remote '$name' → $url"
+    git remote add "$name" "$url"
+  fi
+done
+
+# 3) Setup origin (push-only)
+if git remote get-url origin &>/dev/null; then
+  echo "🔗 'origin' exists, skipping"
+else
+  git remote add origin "$1"
+fi
+for url in "$@"; do
+  echo "⮕ Adding push URL to origin → $url"
+  git remote set-url --push --add origin "$url"
+done
+
+# 4) Wire up current branch with safe upstream logic
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+# Check if github/<branch> exists
+if git ls-remote --exit-code --heads github "$branch" &>/dev/null; then
+  echo "🔄 Remote branch github/$branch exists, setting as upstream"
+  git branch --set-upstream-to=github/"$branch" "$branch"
+else
+  echo "🚚 Pushing initial branch to GitHub and setting upstream"
+  git push -u github "$branch"
+fi
+
+echo "📤 Setting push default to origin"
+git config branch."$branch".pushRemote origin
+
+echo "🎉 Setup complete!  
+• git pull   → github/$branch  
+• git push   → all remotes via origin"
+

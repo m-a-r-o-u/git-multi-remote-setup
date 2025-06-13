@@ -1,0 +1,33 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor swap/backup files
+*~
+*.swp
+*.swo
+
+# IDE/project files
+.vscode/
+.idea/
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
+
+# Build artifacts
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+
+# Local installs
+/.local/
+
+# Git metadata
+.gitignore
+
+# Mac/Linux trash
+.Trashes
+
