@@ -6,6 +6,23 @@ if [ "$#" -lt 1 ]; then
   exit 1
 fi
 
+# 0) If this is a clone with exactly one remote (origin) that already
+#    matches your sole URL, rename it to github/gitlab so we don't add dupes.
+if [ "$#" -eq 1 ] && git rev-parse --is-inside-work-tree &>/dev/null; then
+  if git remote get-url origin &>/dev/null; then
+    origin_url=$(git remote get-url origin)
+    if [ "$origin_url" = "$1" ]; then
+      if [[ "$1" =~ github\.com ]]; then
+        echo "🔀 Renaming existing 'origin'→'github'"
+        git remote rename origin github
+      elif [[ "$1" =~ ([Gg]itlab) ]]; then
+        echo "🔀 Renaming existing 'origin'→'gitlab'"
+        git remote rename origin gitlab
+      fi
+    fi
+  fi
+fi
+
 # 1) Init & bootstrap
 if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   echo "🚀 Initializing empty Git repository"
@@ -16,7 +33,7 @@ if ! git rev-parse --verify HEAD &>/dev/null; then
   git commit --allow-empty -m "chore: initial commit"
 fi
 
-# 2) Add named remotes
+# 2) Add named remotes (github/gitlab/remoteN)
 for url in "$@"; do
   if [[ "$url" =~ github\.com ]]; then
     name=github
@@ -34,10 +51,8 @@ for url in "$@"; do
   fi
 done
 
-# 3) Setup origin (push-only)
-if git remote get-url origin &>/dev/null; then
-  echo "🔗 'origin' exists, skipping"
-else
+# 3) Setup origin for push-only
+if ! git remote get-url origin &>/dev/null; then
   git remote add origin "$1"
 fi
 for url in "$@"; do
@@ -45,22 +60,27 @@ for url in "$@"; do
   git remote set-url --push --add origin "$url"
 done
 
-# 4) Wire up current branch with safe upstream logic
+# 4) Wire up current branch safely
 branch=$(git rev-parse --abbrev-ref HEAD)
 
-# Check if github/<branch> exists
-if git ls-remote --exit-code --heads github "$branch" &>/dev/null; then
+# Fetch so that refs/remotes/github/$branch actually exists
+if git remote get-url github &>/dev/null; then
+  echo "📥 Fetching github"
+  git fetch github
+fi
+
+if git rev-parse --verify --quiet refs/remotes/github/"$branch" &>/dev/null; then
   echo "🔄 Remote branch github/$branch exists, setting as upstream"
   git branch --set-upstream-to=github/"$branch" "$branch"
 else
-  echo "🚚 Pushing initial branch to GitHub and setting upstream"
+  echo "🚚 Pushing branch to GitHub and setting upstream"
   git push -u github "$branch"
 fi
 
 echo "📤 Setting push default to origin"
 git config branch."$branch".pushRemote origin
 
-echo "🎉 Setup complete!  
-• git pull   → github/$branch  
-• git push   → all remotes via origin"
-
+echo "🎉 Setup complete!
+ • git pull    → github/$branch
+ • git push    → all remotes via origin
+"
